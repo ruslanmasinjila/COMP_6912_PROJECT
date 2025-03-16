@@ -1,0 +1,142 @@
+\documentclass[12pt]{article}
+\usepackage{amsmath, amssymb, graphicx, float, geometry}
+\usepackage{caption}
+\geometry{margin=1in}
+\title{Robot Localization and Orientation Estimation Using Range-Bearing Sensors}
+\author{Simulation Study}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section*{1. Problem Overview}
+
+A robot is being localized using three range-bearing sensors (cameras) placed at known fixed positions in a 2D coordinate space. Each camera observes the robot and provides a range and bearing measurement with specific associated errors. Additionally, the robot itself is equipped with a sensor to observe the landmarks and estimate its own orientation.
+
+\section*{2. Sensor Setup}
+
+Let the three fixed sensors (cameras) be located at known coordinates:
+\[
+C_1 = (x_1, y_1), \quad C_2 = (x_2, y_2), \quad C_3 = (x_3, y_3)
+\]
+
+Each sensor measures:
+\[
+(r_i, \theta_i) \quad \text{where } i = 1, 2, 3
+\]
+
+Each sensor has associated measurement errors:
+\[
+(\Delta r_i, \Delta \theta_i)
+\]
+
+\section*{3. Robot Position Estimation}
+
+Each sensor converts its polar measurement to a Cartesian estimate of the robot's position:
+\[
+x_i^{est} = x_i + r_i \cdot \cos(\theta_i) \\
+y_i^{est} = y_i + r_i \cdot \sin(\theta_i)
+\]
+
+The uncertainty in these estimates is propagated using the Jacobian of the transformation:
+\[
+J_i = \begin{bmatrix}
+\cos(\theta_i) & -r_i \cdot \sin(\theta_i) \\
+\sin(\theta_i) & r_i \cdot \cos(\theta_i)
+\end{bmatrix}
+\]
+
+The covariance of each estimate becomes:
+\[
+\Sigma_i = J_i \cdot
+\begin{bmatrix}
+\Delta r_i^2 & 0 \\
+0 & \Delta \theta_i^2
+\end{bmatrix} \cdot J_i^T
+\]
+
+Assuming independent sensor measurements, the fused estimate of the robot's position is computed using weighted fusion:
+\[
+\Sigma_{pos}^{-1} = \Sigma_1^{-1} + \Sigma_2^{-1} + \Sigma_3^{-1}
+\]
+\[
+[x_r, y_r]^T = \Sigma_{pos} \cdot \left(\Sigma_1^{-1} \cdot P_1 + \Sigma_2^{-1} \cdot P_2 + \Sigma_3^{-1} \cdot P_3 \right)
+\]
+
+\section*{4. Robot Orientation Estimation}
+
+The robot observes the landmarks from its own frame and measures:
+\[
+(R_i, \phi_i), \quad \text{where } \phi_i \text{ is the bearing from robot to landmark in robot's local frame}
+\]
+
+The expected global bearing from robot to landmark is:
+\[
+\theta_i^{global} = \text{atan2}(y_i - y_r, x_i - x_r)
+\]
+
+Hence, the estimated robot orientation from each landmark is:
+\[
+\psi_i = \theta_i^{global} - \phi_i
+\]
+
+The variance in $\psi_i$ is computed via error propagation:
+\[
+\text{Var}(\theta_i^{global}) \approx
+\left(\frac{(x_i - x_r)^2}{d_i^4} \cdot \sigma_{y_r}^2 +
+\frac{(y_i - y_r)^2}{d_i^4} \cdot \sigma_{x_r}^2 +
+\frac{2(x_i - x_r)(y_i - y_r)}{d_i^4} \cdot \text{Cov}_{xy}\right)
+\]
+\[
+\text{Var}(\psi_i) = \text{Var}(\theta_i^{global}) + \Delta \phi^2
+\]
+
+The robot's final orientation is a weighted average:
+\[
+\psi = \frac{\sum_i w_i \cdot \psi_i}{\sum_i w_i}, \quad w_i = \frac{1}{\text{Var}(\psi_i)}
+\]
+
+The overall variance in the orientation is:
+\[
+\text{Var}(\psi) = \frac{1}{\sum_i w_i}
+\]
+
+\section*{5. Simulation Workflow}
+
+The simulation involves:
+\begin{itemize}
+    \item Initializing the robot at a random location and orientation.
+    \item Moving the robot through 50 steps with random perturbations.
+    \item Estimating the position and orientation at each step.
+    \item Calculating Root Mean Squared Error (RMSE) in both position and orientation.
+\end{itemize}
+
+\section*{6. Performance Evaluation}
+
+The RMSE for position and orientation is computed as:
+\[
+\text{RMSE}_{pos} = \sqrt{\frac{1}{N} \sum_{i=1}^{N} \left((x_i - \hat{x}_i)^2 + (y_i - \hat{y}_i)^2 \right)}
+\]
+\[
+\text{RMSE}_{\theta} = \sqrt{\frac{1}{N} \sum_{i=1}^{N} (\theta_i - \hat{\theta}_i)^2}
+\]
+
+\section*{7. Output Data}
+
+The estimated and actual values for position and orientation are saved in a CSV file with the following columns:
+
+\begin{itemize}
+    \item True\_X, True\_Y, True\_Theta\_rad
+    \item Est\_X, Est\_Y, Est\_Theta\_rad
+\end{itemize}
+
+\section*{8. Notes}
+
+\begin{itemize}
+    \item Orientation wrapping is handled via angle normalization.
+    \item Covariances are propagated through nonlinear functions using Jacobians.
+    \item The fusion model assumes independent Gaussian noise from sensors.
+\end{itemize}
+
+\end{document}
+
