@@ -2,10 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import matplotlib.animation as animation
+from scipy.stats import chi2
 
 # Simulation parameters
-np.random.seed(35)
-num_steps = 50
+np.random.seed(50)
+num_steps = 100
 
 # Landmark positions (cameras)
 landmarks = np.array([[0, 0], [10, 0], [5, 10]])
@@ -131,23 +132,65 @@ cov_yy = [cov[1, 1] for cov in est_covariances]
 pos_rmse = np.sqrt(np.mean((true_positions - est_positions)**2))
 angle_rmse = np.sqrt(np.mean((true_orientations - est_orientations)**2))
 
-# Static Plot for Project Report
-plt.figure(figsize=(10, 8))
-plt.plot(true_positions[:, 0], true_positions[:, 1], 'g.-', label='True Position')
-plt.plot(est_positions[:, 0], est_positions[:, 1], 'r.-', label='Estimated Position')
-plt.quiver(est_positions[:, 0], est_positions[:, 1], np.cos(est_orientations), np.sin(est_orientations), 
-           color='r', width=0.005, scale=10, label='Estimated Orientation')
-plt.quiver(true_positions[:, 0], true_positions[:, 1], np.cos(true_orientations), np.sin(true_orientations), 
-           color='g', width=0.005, scale=10, label='True Orientation')
-plt.scatter(landmarks[:, 0], landmarks[:, 1], c='b', marker='X', s=100, label='Landmarks')
-plt.title(f"Robot Position and Orientation Estimation\nPosition RMSE: {pos_rmse:.3f}, Orientation RMSE: {np.rad2deg(angle_rmse):.2f}°")
-plt.xlabel('X')
-plt.ylabel('Y')
-plt.legend()
-plt.axis('equal')
-plt.grid(True)
-plt.tight_layout()
-plt.show()
+# Store results in a pandas DataFrame
+df = pd.DataFrame({
+    'True_X': true_positions[:, 0],
+    'True_Y': true_positions[:, 1],
+    'True_Theta_rad': true_orientations,
+    'Est_X': est_positions[:, 0],
+    'Est_Y': est_positions[:, 1],
+    'Est_Theta_rad': est_orientations,
+    'Cov_XX': cov_xx,
+    'Cov_XY': cov_xy,
+    'Cov_YX': cov_yx,
+    'Cov_YY': cov_yy
+})
+
+# Export to CSV file
+csv_filename = "simulation_results.csv"
+df.to_csv(csv_filename, index=False)
+
+###########################################################################
+
+# Compute estimation error
+error_x = df['Est_X'] - df['True_X']
+error_y = df['Est_Y'] - df['True_Y']
+
+# Create error vectors and covariance matrices for each time step
+error_vectors = np.vstack((error_x, error_y)).T
+cov_matrices = np.array([[ [row['Cov_XX'], row['Cov_XY']], 
+                           [row['Cov_YX'], row['Cov_YY']] ] for _, row in df.iterrows()])
+
+# Calculate NEES
+nees_values = np.array([e.T @ np.linalg.inv(P) @ e for e, P in zip(error_vectors, cov_matrices)])
+
+# Calculate ANEES
+anees = np.mean(nees_values)
+
+# Chi-squared consistency bounds
+dof = 2
+confidence_level = 0.95
+n = len(nees_values)
+lower_bound = chi2.ppf((1 - confidence_level) / 2, dof * n) / n
+upper_bound = chi2.ppf(1 - (1 - confidence_level) / 2, dof * n) / n
+
+# Print results
+consistency = None
+print(f"Average NEES (ANEES): {anees:.4f}")
+print(f"95% Confidence Bounds: [{lower_bound:.4f}, {upper_bound:.4f}]")
+if lower_bound <= anees <= upper_bound:
+    print("Estimates are statistically consistent.")
+    consistency = "Estimates are statistically consistent."
+else:
+    print("Estimates are NOT statistically consistent.")
+    consistency = "Estimates are NOT statistically consistent."
+
+
+
+
+##########################################################################
+
+
 
 # Animation
 fig, ax = plt.subplots(figsize=(20, 20))
@@ -159,7 +202,13 @@ y_max = max(np.max(true_positions[:, 1]), np.max(landmarks[:, 1])) + 2
 
 ax.set_xlim(x_min, x_max)
 ax.set_ylim(y_min, y_max)
-ax.set_title(f"Animated Robot Pose Estimation\nPosition RMSE: {pos_rmse:.3f}, Orientation RMSE: {np.rad2deg(angle_rmse):.2f}°")
+ax.set_title(
+    f"Animated Robot Pose Estimation\n"
+    f"Position RMSE: {pos_rmse:.3f}, Orientation RMSE: {np.rad2deg(angle_rmse):.2f}°\n"
+    f"Average NEES (ANEES): {anees:.4f}\n"
+    f"95% Confidence Bounds: [{lower_bound:.4f}, {upper_bound:.4f}]\n"
+    f"{consistency}"   
+)
 ax.set_xlabel("X")
 ax.set_ylabel("Y")
 ax.grid(True)
@@ -190,24 +239,28 @@ def update(frame):
 ani = animation.FuncAnimation(fig, update, frames=num_steps, interval=300, blit=False)
 plt.show()
 
-# Store results in a pandas DataFrame
-df = pd.DataFrame({
-    'True_X': true_positions[:, 0],
-    'True_Y': true_positions[:, 1],
-    'True_Theta_rad': true_orientations,
-    'Est_X': est_positions[:, 0],
-    'Est_Y': est_positions[:, 1],
-    'Est_Theta_rad': est_orientations,
-    'Cov_XX': cov_xx,
-    'Cov_XY': cov_xy,
-    'Cov_YX': cov_yx,
-    'Cov_YY': cov_yy
-})
 
-# Export to CSV file
-csv_filename = "simulation_results.csv"
-df.to_csv(csv_filename, index=False)
+##########################################################################
+'''
+# Static Plot for Project Report
+plt.figure(figsize=(10, 8))
+plt.plot(true_positions[:, 0], true_positions[:, 1], 'g.-', label='True Position')
+plt.plot(est_positions[:, 0], est_positions[:, 1], 'r.-', label='Estimated Position')
+plt.quiver(est_positions[:, 0], est_positions[:, 1], np.cos(est_orientations), np.sin(est_orientations), 
+           color='r', width=0.005, scale=10, label='Estimated Orientation')
+plt.quiver(true_positions[:, 0], true_positions[:, 1], np.cos(true_orientations), np.sin(true_orientations), 
+           color='g', width=0.005, scale=10, label='True Orientation')
+plt.scatter(landmarks[:, 0], landmarks[:, 1], c='b', marker='X', s=100, label='Landmarks')
+plt.title(f"Robot Position and Orientation Estimation\nPosition RMSE: {pos_rmse:.3f}, Orientation RMSE: {np.rad2deg(angle_rmse):.2f}°")
+plt.xlabel('X')
+plt.ylabel('Y')
+plt.legend()
+plt.axis('equal')
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+'''
+##########################################################################
 
-# Confirm file was saved
-csv_filename
+
 
