@@ -237,9 +237,6 @@ def update(frame):
     return true_path_line, est_path_line, true_arrow, est_arrow
 
 ani = animation.FuncAnimation(fig, update, frames=num_steps, interval=300, blit=False)
-
-# Save animation as a GIF
-ani.save("robot_pose_estimation.gif", writer='pillow', fps=3)
 plt.show()
 
 
@@ -264,6 +261,8 @@ plt.tight_layout()
 plt.show()
 '''
 ##########################################################################
+
+ani.save("robot_pose_estimation.gif", writer='pillow', fps=3)
 
 
 
